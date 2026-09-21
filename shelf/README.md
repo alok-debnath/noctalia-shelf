@@ -24,7 +24,7 @@ Noctalia plugins cannot take part in Wayland drag and drop yet, so Shelf ships a
 - `gtk4`
 - `xdg-utils`, for opening files and folders from the panel
 
-Optional: install `gtk4-layer-shell` and the drop window docks to a screen edge above your windows. Without it the
+Optional: install `gtk4-layer-shell` and the drop window opens at your mouse cursor (or a screen edge you pick), above your windows. Without it the
 window opens as a normal floating window and your compositor decides where it goes.
 
 ```sh
@@ -64,7 +64,7 @@ Plugin settings live under **Settings → Plugins → Shelf**. Widget settings l
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `window_position` | `select` | `right` | Screen edge or corner the drop window docks to. Needs `gtk4-layer-shell`. |
+| `window_position` | `select` | `cursor` | Where the drop window opens: centred on the mouse cursor, or docked to a screen edge or corner. Needs `gtk4-layer-shell`. Opening at the cursor uses `hyprctl` and falls back to the screen centre on other compositors. |
 | `remove_after_drag` | `bool` | `false` | Take files off the shelf once they are dropped into another app. |
 | `close_after_drag` | `bool` | `false` | Close the drop window once files are dropped into another app. |
 | `python` | `file` | empty | Interpreter for the drop window. Empty uses `/usr/bin/python3` when it exists, otherwise `python3` from `PATH`. |
@@ -92,7 +92,7 @@ noctalia msg plugin alok-debnath/shelf:service all panel         # toggle the pa
   `~/.local/state/noctalia/plugins/data/alok-debnath/shelf/shelf.json`. Shelf never copies, moves, or deletes your
   files.
 - **Processes spawned**: the drop window (`python3 helper/shelf-window.py`), a one-time `python3 -c` check that GTK 4
-  is importable, `xdg-open` to open files and folders, and `gdbus` to ask the file manager to highlight a file
+  is importable, `xdg-open` to open files and folders, `hyprctl` to find the cursor (Hyprland only), and `gdbus` to ask the file manager to highlight a file
   (`org.freedesktop.FileManager1.ShowItems`), falling back to opening the folder.
 - **Network**: none.
 - The drop window only reads the shelf file. It reports actions (add, remove, clear) as JSON lines on stdout, and the
