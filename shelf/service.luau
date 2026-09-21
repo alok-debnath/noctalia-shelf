@@ -90,7 +90,8 @@ local function helperCommand(toggle)
   if toggle then
     table.insert(parts, "--toggle")
   end
-  return table.concat(parts, " ")
+  -- stderr joins stdout, so GTK warnings and tracebacks land in the Noctalia log.
+  return table.concat(parts, " ") .. " 2>&1"
 end
 
 local function launch(toggle)
