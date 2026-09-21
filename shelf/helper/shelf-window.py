@@ -139,16 +139,16 @@ def rgba(hex_color, alpha):
 def build_css(c):
     return f"""
 window.shelf-window {{ background: transparent; }}
+/* The theme's square drop highlight; the card draws its own rounded one. */
+window.shelf-window *:drop(active) {{ box-shadow: none; outline: none; border-color: transparent; }}
 .shelf-card {{
-  background: {rgba(c['surface'], 0.97)};
+  background: {c['surface']};
   color: {c['on_surface']};
-  border: 1px solid {rgba(c['outline'], 0.6)};
+  border: 1px solid {rgba(c['outline'], 0.8)};
   border-radius: 22px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  margin: 12px;
   padding: 14px;
 }}
-.shelf-card.drop-hover {{ border-color: {c['primary']}; }}
+window.shelf-window .shelf-card.drop-hover {{ border-color: {c['primary']}; }}
 .shelf-title {{ font-weight: 700; font-size: 1.1em; }}
 .shelf-count {{
   background: {rgba(c['primary'], 0.18)};
@@ -210,6 +210,7 @@ list.shelf-list > row:hover .row-remove {{ opacity: 1; }}
   font-weight: 700;
   margin: 18px;
 }}
+dragicon {{ background: none; box-shadow: none; border: none; }}
 .drag-pill {{
   background: {c['primary']};
   color: {c['on_primary']};
@@ -471,10 +472,15 @@ class ShelfWindow(Gtk.ApplicationWindow):
         self.banner.set_can_target(False)
         overlay.add_overlay(self.banner)
 
-        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        # Async target: file managers such as Nautilus often offer only MOVE,
+        # which a COPY-only Gtk.DropTarget refuses. Accept any action, read the
+        # file list ourselves, and always finish the drop as COPY so the source
+        # never deletes the file.
+        drop = Gtk.DropTargetAsync.new(None, Gdk.DragAction.COPY | Gdk.DragAction.MOVE | Gdk.DragAction.LINK)
         drop.connect("accept", self._on_drop_accept)
-        drop.connect("enter", self._on_drop_enter)
-        drop.connect("leave", self._on_drop_leave)
+        drop.connect("drag-enter", self._on_drop_enter)
+        drop.connect("drag-motion", lambda *_: Gdk.DragAction.COPY)
+        drop.connect("drag-leave", self._on_drop_leave)
         drop.connect("drop", self._on_drop)
         overlay.add_controller(drop)
 
@@ -714,21 +720,38 @@ class ShelfWindow(Gtk.ApplicationWindow):
 
     def _on_drop_accept(self, target, drop):
         # Ignore our own drags so dragging a row across the window is a no-op.
-        return not self.dragging_out and drop.get_formats().contain_gtype(Gdk.FileList)
+        if self.dragging_out:
+            return False
+        # Other apps offer MIME types, not the GdkFileList GType, so check
+        # both. GTK deserializes either into a GdkFileList for the drop handler.
+        formats = drop.get_formats()
+        return (formats.contain_gtype(Gdk.FileList)
+                or formats.contain_mime_type("text/uri-list")
+                or formats.contain_mime_type("application/vnd.portal.filetransfer"))
 
-    def _on_drop_enter(self, target, x, y):
+    def _on_drop_enter(self, target, drop, x, y):
         self.card.add_css_class("drop-hover")
         self.banner.set_visible(bool(self.paths))
         return Gdk.DragAction.COPY
 
-    def _on_drop_leave(self, target):
+    def _on_drop_leave(self, target, drop=None):
         self.card.remove_css_class("drop-hover")
         self.banner.set_visible(False)
 
-    def _on_drop(self, target, value, x, y):
+    def _on_drop(self, target, drop, x, y):
         self._on_drop_leave(target)
-        files = value.get_files() if value is not None else []
-        self.add_paths([f.get_path() for f in files if f.get_path()])
+
+        def done(source, result):
+            try:
+                value = source.read_value_finish(result)
+            except GLib.Error as err:
+                print(f"shelf: could not read dropped files: {err.message}", file=sys.stderr)
+                source.finish(0)
+                return
+            self.add_paths([f.get_path() for f in value.get_files() if f.get_path()])
+            source.finish(Gdk.DragAction.COPY)
+
+        drop.read_value_async(Gdk.FileList, GLib.PRIORITY_DEFAULT, None, done)
         return True
 
     # misc input
