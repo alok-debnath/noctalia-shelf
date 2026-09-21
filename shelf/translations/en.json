@@ -79,7 +79,8 @@
   "settings": {
     "window_position": {
       "label": "Drop window position",
-      "description": "Screen edge the drop window sticks to. Needs gtk4-layer-shell; without it the compositor places the window.",
+      "description": "Where the drop window opens. Needs gtk4-layer-shell; without it the compositor places the window. Opening at the cursor needs Hyprland and falls back to the centre elsewhere.",
+      "cursor": "At the cursor",
       "right": "Right",
       "left": "Left",
       "top": "Top",

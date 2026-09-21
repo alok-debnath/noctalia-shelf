@@ -74,7 +74,7 @@ local function helperCommand(toggle)
     shellQuote(python()),
     shellQuote(noctalia.pluginDir() .. "/" .. HELPER),
     "--store", shellQuote(store.path()),
-    "--position", shellQuote(noctalia.getConfig("window_position") or "right"),
+    "--position", shellQuote(noctalia.getConfig("window_position") or "cursor"),
   }
   local colors = paletteJson()
   if colors ~= nil then

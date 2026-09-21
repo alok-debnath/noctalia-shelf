@@ -1,6 +1,6 @@
 id           = "alok-debnath/shelf"
 name         = "Shelf"
-version      = "1.0.0"
+version      = "1.1.0"
 plugin_api   = 24
 author       = "alok-debnath"
 license      = "MIT"
@@ -16,8 +16,11 @@ key             = "window_position"
 type            = "select"
 label_key       = "settings.window_position.label"
 description_key = "settings.window_position.description"
-default         = "right"
+default         = "cursor"
 
+  [[setting.options]]
+  value     = "cursor"
+  label_key = "settings.window_position.cursor"
   [[setting.options]]
   value     = "right"
   label_key = "settings.window_position.right"

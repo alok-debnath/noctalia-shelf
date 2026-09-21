@@ -24,6 +24,7 @@ import ctypes.util
 import json
 import os
 import re
+import subprocess
 import sys
 
 APP_ID = "dev.noctalia.Shelf"
@@ -254,6 +255,39 @@ def pixbuf_texture(pix):
                                  pix.read_pixel_bytes(), pix.get_rowstride())
 
 
+def cursor_location():
+    """Pointer position relative to the output under it, or None.
+
+    Wayland does not let clients read the global pointer position, so this asks
+    the compositor. Only Hyprland is supported; elsewhere the window falls back
+    to the centre of the screen.
+    """
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return None
+    try:
+        pos = json.loads(subprocess.run(["hyprctl", "cursorpos", "-j"], capture_output=True,
+                                        text=True, timeout=1).stdout)
+        monitors = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True,
+                                             text=True, timeout=1).stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    for m in monitors:
+        scale = m.get("scale") or 1
+        width, height = m["width"] / scale, m["height"] / scale
+        if m.get("transform", 0) % 2:
+            width, height = height, width
+        if m["x"] <= pos["x"] < m["x"] + width and m["y"] <= pos["y"] < m["y"] + height:
+            return {
+                "monitor": m["name"],
+                "x": pos["x"] - m["x"],
+                "y": pos["y"] - m["y"],
+                "width": width,
+                "height": height,
+                "reserved": m.get("reserved") or [0, 0, 0, 0],  # left, top, right, bottom
+            }
+    return None
+
+
 def file_list(paths):
     return Gdk.FileList.new_from_list([Gio.File.new_for_path(p) for p in paths])
 
@@ -460,6 +494,12 @@ class ShelfWindow(Gtk.ApplicationWindow):
         LayerShell.set_namespace(self, "noctalia-shelf")
         LayerShell.set_layer(self, LayerShell.Layer.TOP)
         LayerShell.set_keyboard_mode(self, LayerShell.KeyboardMode.ON_DEMAND)
+        self._cursor = cursor_location() if position == "cursor" else None
+        if self._cursor is not None:
+            self._place_at_cursor()
+            # The real size is known only once the window is laid out.
+            self.connect("map", lambda *_: GLib.idle_add(self._place_at_cursor))
+            return
         edges = {
             "right": [LayerShell.Edge.RIGHT],
             "left": [LayerShell.Edge.LEFT],
@@ -469,11 +509,49 @@ class ShelfWindow(Gtk.ApplicationWindow):
             "top_left": [LayerShell.Edge.TOP, LayerShell.Edge.LEFT],
             "bottom_right": [LayerShell.Edge.BOTTOM, LayerShell.Edge.RIGHT],
             "bottom_left": [LayerShell.Edge.BOTTOM, LayerShell.Edge.LEFT],
-            "center": [],
-        }.get(position, [LayerShell.Edge.RIGHT])
+        }.get(position, [])  # "center", or "cursor" with no pointer position
         for edge in edges:
             LayerShell.set_anchor(self, edge, True)
             LayerShell.set_margin(self, edge, 8)
+
+    def follow_cursor(self):
+        """Move an already open window to the pointer, when placed by cursor."""
+        if LayerShell is None or self.opts.position != "cursor":
+            return
+        loc = cursor_location()
+        if loc is not None:
+            self._cursor = loc
+            self._place_at_cursor()
+
+    def _place_at_cursor(self):
+        loc = getattr(self, "_cursor", None)
+        if LayerShell is None or loc is None:
+            return False
+        LayerShell.set_anchor(self, LayerShell.Edge.LEFT, True)
+        LayerShell.set_anchor(self, LayerShell.Edge.TOP, True)
+        LayerShell.set_anchor(self, LayerShell.Edge.RIGHT, False)
+        LayerShell.set_anchor(self, LayerShell.Edge.BOTTOM, False)
+        # Measure margins from the output edge, not from the bar's reserved area.
+        LayerShell.set_exclusive_zone(self, -1)
+        monitors = self.get_display().get_monitors()
+        for i in range(monitors.get_n_items()):
+            monitor = monitors.get_item(i)
+            if monitor.get_connector() == loc["monitor"]:
+                LayerShell.set_monitor(self, monitor)
+                break
+        width = self.get_width() or 340
+        height = self.get_height() or 220
+        res_left, res_top, res_right, res_bottom = (list(loc["reserved"]) + [0, 0, 0, 0])[:4]
+
+        def clamp(value, low, high):
+            return int(max(low, min(value, max(low, high))))
+
+        # Centre the window on the pointer, kept inside the free area.
+        left = clamp(loc["x"] - width / 2, res_left, loc["width"] - res_right - width)
+        top = clamp(loc["y"] - height / 2, res_top, loc["height"] - res_bottom - height)
+        LayerShell.set_margin(self, LayerShell.Edge.LEFT, left)
+        LayerShell.set_margin(self, LayerShell.Edge.TOP, top)
+        return False
 
     # header / empty state
 
@@ -562,6 +640,8 @@ class ShelfWindow(Gtk.ApplicationWindow):
                     self.listbox.select_row(row)
         self.stack.set_visible_child_name("list" if self.paths else "empty")
         self._update_header()
+        if getattr(self, "_cursor", None) is not None:
+            GLib.timeout_add(80, self._place_at_cursor)
 
     def _update_header(self):
         n = len(self.paths)
@@ -716,6 +796,7 @@ class ShelfApp(Gtk.Application):
             if opts.toggle:
                 self.window.close()
             else:
+                self.window.follow_cursor()
                 self.window.present()
             return 0
         if opts.toggle and command_line.get_is_remote():
@@ -739,8 +820,8 @@ class ShelfApp(Gtk.Application):
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog="shelf-window")
     parser.add_argument("--store", required=True, help="path of the plugin's shelf.json")
-    parser.add_argument("--position", default="right",
-                        choices=["right", "left", "top", "bottom", "top_right", "top_left",
+    parser.add_argument("--position", default="cursor",
+                        choices=["cursor", "right", "left", "top", "bottom", "top_right", "top_left",
                                  "bottom_right", "bottom_left", "center"])
     parser.add_argument("--colors", type=json.loads, default={}, help="JSON map of palette role to #rrggbb")
     parser.add_argument("--remove-after-drag", action="store_true")
