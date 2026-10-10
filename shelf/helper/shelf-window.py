@@ -69,6 +69,7 @@ def _maybe_reexec_with_layer_shell():
     if not lib:
         return
     env = dict(os.environ)
+    env["SHELF_ORIG_LD_PRELOAD"] = env.get("LD_PRELOAD", "")
     env["LD_PRELOAD"] = (lib + " " + env.get("LD_PRELOAD", "")).strip()
     env["SHELF_LAYER_SHELL_TRIED"] = "1"
     os.execve(sys.executable, [sys.executable] + sys.argv, env)
@@ -107,6 +108,16 @@ if os.environ.get("SHELF_LAYER_SHELL_TRIED"):
     except (ValueError, ImportError, AttributeError):
         LayerShell = None
 
+# The library is loaded now. Put the environment back, so apps opened from the
+# shelf do not inherit LD_PRELOAD and load GTK 4 and the layer-shell library.
+if "SHELF_ORIG_LD_PRELOAD" in os.environ:
+    original = os.environ.pop("SHELF_ORIG_LD_PRELOAD")
+    if original:
+        os.environ["LD_PRELOAD"] = original
+    else:
+        os.environ.pop("LD_PRELOAD", None)
+os.environ.pop("SHELF_LAYER_SHELL_TRIED", None)
+
 HOME = os.path.expanduser("~")
 THUMB = 40
 THUMB_DECODE = THUMB * 2       # enough pixels for a scale-2 output
@@ -120,6 +131,7 @@ MOVE_MIME = "application/x-noctalia-shelf-move"
 MOVE_HINT = "Drag to move"
 DIR_COUNT_LIMIT = 1000
 CACHE_SIZE = 256
+MAX_IMAGE_BYTES = 12 * 1000 * 1000  # larger images without a cached thumbnail get an icon
 POSITIONS = ["cursor", "last", "right", "left", "top", "bottom", "top_right", "top_left",
              "bottom_right", "bottom_left", "center"]
 
@@ -371,6 +383,7 @@ def hand_cursor(widget):
     press.connect("cancel", lambda *_: widget.set_cursor(grab))
     press.connect("stopped", lambda *_: widget.set_cursor(grab))
     widget.add_controller(press)
+    return press
 
 
 def paths_from_text(text):
@@ -457,7 +470,8 @@ def load_details(key):
     thumb = info.get_attribute_byte_string("thumbnail::path")
     ctype = info.get_content_type() or ""
     source = thumb if thumb and info.get_attribute_boolean("thumbnail::is-valid") else None
-    if source is None and ctype.startswith("image/") and ctype != "image/svg+xml":
+    if (source is None and ctype.startswith("image/") and ctype != "image/svg+xml"
+            and info.get_size() <= MAX_IMAGE_BYTES):
         source = path
     pixbuf = None
     if source is not None:
@@ -475,15 +489,22 @@ class DetailsLoader:
     def __init__(self):
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="shelf-thumb")
         self.cache = OrderedDict()
-        self.waiting = {}  # path -> callbacks
+        self.waiting = {}  # (path, known key) -> callbacks
 
-    def request(self, path, callback):
-        self.waiting.setdefault(path, []).append(callback)
-        if len(self.waiting[path]) == 1:
-            self.pool.submit(self._work, path)
+    def request(self, path, callback, known=None):
+        """known is the key the caller already shows; nothing is delivered
+        when the file still matches it, so a shelf larger than the cache does
+        not decode every thumbnail again on each show."""
+        wait = (path, known)
+        self.waiting.setdefault(wait, []).append(callback)
+        if len(self.waiting[wait]) == 1:
+            self.pool.submit(self._work, path, known)
 
-    def _work(self, path):
+    def _work(self, path, known):
         key = stat_key(path)
+        if key == known:
+            GLib.idle_add(self._skip, (path, known))
+            return
         details = self.cache.get(key)  # dict reads are safe across threads
         if details is None:
             try:
@@ -491,9 +512,9 @@ class DetailsLoader:
             except Exception as err:  # never lose the callback
                 print(f"shelf: details for {path}: {err}", file=sys.stderr)
                 details = Details(key, os.path.exists(path), pretty_dir(path))
-        GLib.idle_add(self._deliver, path, details)
+        GLib.idle_add(self._deliver, (path, known), details)
 
-    def _deliver(self, path, details):
+    def _deliver(self, wait, details):
         if details.pixbuf is not None and details.texture is None:
             details.texture = pixbuf_texture(details.pixbuf)
             details.pixbuf = None
@@ -501,8 +522,12 @@ class DetailsLoader:
         self.cache.move_to_end(details.key)
         while len(self.cache) > CACHE_SIZE:
             self.cache.popitem(last=False)
-        for callback in self.waiting.pop(path, []):
+        for callback in self.waiting.pop(wait, []):
             callback(details)
+        return False
+
+    def _skip(self, wait):
+        self.waiting.pop(wait, None)
         return False
 
     def shutdown(self):
@@ -672,7 +697,8 @@ class ShelfRow(Gtk.ListBoxRow):
         remove.add_css_class("danger")
         remove.add_css_class("row-remove")
         remove.set_tooltip_text("Remove from shelf")
-        remove.connect("clicked", lambda *_: window.remove_paths([self.path]))
+        self._remove_btn = remove
+        self._remove_id = remove.connect("clicked", self._on_remove)
         # The row shows a hand; the button is a plain click target.
         remove.set_cursor(Gdk.Cursor.new_from_name("default", None))
         box.append(remove)
@@ -683,15 +709,27 @@ class ShelfRow(Gtk.ListBoxRow):
         src.connect("drag-cancel", self._on_drag_cancel)
         src.connect("drag-end", self._on_drag_end)
         self.add_controller(src)
-        hand_cursor(self)
+        self._controllers = [src, hand_cursor(self)]
         self._drag_paths = []
         self._cancelled = False
 
+    def _on_remove(self, _button):
+        self.window.remove_paths([self.path])
+
+    def teardown(self):
+        """Drops the handlers that point back at this row. GTK holds them, and
+        they hold the row, so a removed row would otherwise never be freed."""
+        self._remove_btn.disconnect(self._remove_id)
+        for controller in self._controllers:
+            self.remove_controller(controller)
+        self._controllers = []
+
     def refresh(self):
-        self.window.loader.request(self.path, self.apply)
+        known = self.details.key if self.details is not None else None
+        self.window.loader.request(self.path, self.apply, known)
 
     def apply(self, details):
-        if details is self.details:
+        if self.details is not None and details.key == self.details.key:
             return
         self.details = details
         self.exists = details.exists
@@ -722,7 +760,7 @@ class ShelfRow(Gtk.ListBoxRow):
         paths = self.window.selected_paths()
         if self.path not in paths or len(paths) < 2:
             paths = [self.path]
-        self._drag_paths = [p for p in paths if os.path.exists(p)]
+        self._drag_paths = self.window.existing(paths)
         if not self._drag_paths:
             return None
         self.window.dragging_out = True
@@ -1069,7 +1107,10 @@ class ShelfWindow(Gtk.ApplicationWindow):
         win.add_css_class("shelf-probe")
         LayerShell.init_for_window(win)
         LayerShell.set_namespace(win, "noctalia-shelf-grip")
-        LayerShell.set_layer(win, LayerShell.Layer.OVERLAY)
+        # The window's own layer, mapped after it so it stacks above it. A
+        # fullscreen app then covers both, instead of an invisible grip on
+        # OVERLAY catching clicks over the app and blocking direct scanout.
+        LayerShell.set_layer(win, LayerShell.Layer.TOP)
         LayerShell.set_keyboard_mode(win, LayerShell.KeyboardMode.NONE)
         LayerShell.set_monitor(win, monitor)
         for edge in (LayerShell.Edge.LEFT, LayerShell.Edge.RIGHT, LayerShell.Edge.TOP, LayerShell.Edge.BOTTOM):
@@ -1292,6 +1333,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
                 self.rows[p] = row
             for row in old.values():
                 self.listbox.remove(row)
+                row.teardown()
             # Reorder only when the order changed, by moving rows into place.
             current = []
             child = self.listbox.get_first_child()
@@ -1328,6 +1370,11 @@ class ShelfWindow(Gtk.ApplicationWindow):
         self.hint.set_visible(n > 0)
         if self._grip_surface is not None:
             GLib.idle_add(lambda: self._sync_grip() and False)  # the title may have changed width
+
+    def existing(self, paths):
+        """paths minus files known to be missing. Uses each row's last stat,
+        made off the main thread, so a stalled mount cannot freeze a drag."""
+        return [p for p in paths if p not in self.rows or self.rows[p].exists]
 
     def selected_paths(self):
         return [r.path for r in self.listbox.get_selected_rows()]
@@ -1367,7 +1414,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
     def _on_all_prepare(self, source, x, y):
         sel = self.selected_paths()
         paths = sel if len(sel) > 1 else self.paths
-        self._all_paths = [p for p in paths if os.path.exists(p)]
+        self._all_paths = self.existing(paths)
         if not self._all_paths:
             return None
         self.dragging_out = True
@@ -1429,7 +1476,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
     # misc input
 
     def _on_row_activated(self, listbox, row):
-        if os.path.exists(row.path):
+        if row.exists:
             try:
                 Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(row.path).get_uri(), None)
             except GLib.Error as err:
@@ -1455,7 +1502,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
         return False
 
     def _copy(self):
-        paths = [p for p in (self.selected_paths() or self.paths) if os.path.exists(p)]
+        paths = self.existing(self.selected_paths() or self.paths)
         if not paths:
             return
         uris = [Gio.File.new_for_path(p).get_uri() for p in paths]
@@ -1596,6 +1643,10 @@ class ShelfApp(Gtk.Application):
         self.provider.load_from_string(build_css(colors))
 
     def _on_visible(self, window, _pspec, announce=True):
+        if not window.get_visible():
+            # Hidden by the compositor or close-request skips dismiss(), so
+            # drop the grip here too, or its input area keeps catching clicks.
+            window._hide_grip()
         if not window.get_visible() and window._probe is None:
             window.wanted = False  # hidden by the compositor or close-request
         if announce:

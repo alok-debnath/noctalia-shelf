@@ -116,7 +116,8 @@ noctalia msg plugin alok-debnath/shelf:service all shortcut      # open the pane
 ## Notes
 
 - **Files written**: when you press **Add for me** or **Remove** in the panel's shortcut section, your compositor's
-  config file (after saving a copy as `<config>.shelf-backup`). Otherwise the shelf list at `<plugin data dir>/shelf.json`, usually
+  config file. **Add for me** first saves your file as `<config>.shelf-backup`; **Remove** takes out only Shelf's two
+  lines and leaves that backup as it was. Otherwise the shelf list at `<plugin data dir>/shelf.json`, usually
   `~/.local/state/noctalia/plugins/data/alok-debnath/shelf/shelf.json`, and the drop window's last position next to
   it in `window.json`. Shelf never copies, moves, or deletes your files.
 - **Processes spawned**: the drop window (`python3 helper/shelf-window.py`), a one-time `python3 -c` check that GTK 4

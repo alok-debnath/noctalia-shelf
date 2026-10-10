@@ -31,6 +31,7 @@ local generation = 0    -- bumped per launch, so stale gdbus replies are ignored
 local wantVisible = false -- the window is shown, or about to be
 local pending = nil     -- "hide" when the window should hide once it is up
 local depsOk = false
+local depsPython = nil -- the interpreter depsOk was checked for
 local depsChecking = false
 local depsWaiting = {}
 
@@ -225,9 +226,11 @@ local function withDeps(fn)
   end
   depsChecking = true
   local check = "import gi; gi.require_version('Gtk', '4.0'); from gi.repository import Gtk"
-  noctalia.runAsync({ python(), "-c", check }, function(result)
+  local interpreter = python()
+  noctalia.runAsync({ interpreter, "-c", check }, function(result)
     depsChecking = false
     depsOk = result.exitCode == 0
+    depsPython = interpreter
     local waiting = depsWaiting
     depsWaiting = {}
     if not depsOk then
@@ -300,18 +303,23 @@ function update()
     return
   end
   local gen = generation
+  -- Match the full helper path and our store, so an editor or another
+  -- checkout with "shelf-window.py" in its command line cannot hide a crash.
   noctalia.processMatches(function(matched)
     if not matched and running and not launching and gen == generation then
       noctalia.log("shelf: drop window process is gone")
       setRunning(false)
     end
-  end, HELPER)
+  end, noctalia.pluginDir() .. "/" .. HELPER, store.path() or HELPER)
 end
 
 -- A setting changed. Keep the store, and pass the new settings to a running
 -- window right away.
 function onConfigChanged()
-  depsOk = false
+  -- Check GTK again only when the interpreter changed.
+  if python() ~= depsPython then
+    depsOk = false
+  end
   if running then
     activate("configure")
   end
