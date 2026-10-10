@@ -117,6 +117,7 @@ IDLE_QUIT_S = 10 * 60
 PROBE_TIMEOUT_MS = 250
 FULL_GRACE_MS = 40
 MOVE_MIME = "application/x-noctalia-shelf-move"
+MOVE_HINT = "Drag to move"
 DIR_COUNT_LIMIT = 1000
 CACHE_SIZE = 256
 POSITIONS = ["cursor", "last", "right", "left", "top", "bottom", "top_right", "top_left",
@@ -1076,6 +1077,8 @@ class ShelfWindow(Gtk.ApplicationWindow):
         LayerShell.set_exclusive_zone(win, 0)
         area = Gtk.Box(hexpand=True, vexpand=True)
         area.set_cursor(Gdk.Cursor.new_from_name("grab", None))
+        # The surface covers the grip and title, so their own hint never shows.
+        area.set_tooltip_text(MOVE_HINT)
         win.set_child(area)
         hover = Gtk.EventControllerMotion()
         hover.connect("enter", lambda *_: self.card.add_css_class("grip-hover"))
@@ -1151,7 +1154,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
 
     def _make_movable(self, widget):
         widget.set_cursor(Gdk.Cursor.new_from_name("grab", None))
-        widget.set_tooltip_text("Drag to move")
+        widget.set_tooltip_text(MOVE_HINT)
         if LayerShell is None:
             # A plain toplevel: let the compositor move it.
             gesture = Gtk.GestureDrag()
