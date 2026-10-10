@@ -4,7 +4,7 @@ A drop shelf for your desktop. Drag files onto it from any app, keep them there 
 into a browser upload, a chat, an email, or a folder. Shelf keeps references only: files stay where they are, and
 removing something from the shelf never touches the file on disk.
 
-![Shelf panel listing five files](assets/panel.png)
+![Shelf panel listing six files](assets/panel.png)
 ![Shelf drop window](assets/drop-window.png)
 
 ## Plugin
@@ -64,6 +64,8 @@ when you press the key. Shelf makes that one step:
    shortcut`). Shelf detects your compositor and shows the exact line for its config.
 3. Press **Add for me** to have Shelf add the line (it backs the file up as `<config>.shelf-backup`), or **Copy line**
    and paste it yourself.
+
+![Keyboard shortcut section of the Shelf panel](assets/shortcut.png)
 
 **Add for me** supports Hyprland (`hyprland.conf` or `hyprland.lua`), niri, Sway, Scroll, Umbriel, labwc, and Mango.
 It refuses when the keys are already bound, and shows the line that uses them. On KDE Plasma and GNOME, add a custom
@@ -128,5 +130,5 @@ noctalia msg plugin alok-debnath/shelf:service all shortcut      # open the pane
   reads where the pointer is. If the compositor does not report it, the window opens in the middle of the screen.
 - Thumbnails in the drop window come from the freedesktop thumbnail cache when your file manager made one, or from
   the image itself.
-- Tested on Hyprland and umbriel. The drop window is plain GTK 4, so it works on any Wayland compositor. Placement
-  and moving need a compositor with layer-shell support.
+- Tested on umbriel; earlier versions were also tested on Hyprland. The drop window is plain GTK 4, so it works on
+  any Wayland compositor. Placement and moving need a compositor with layer-shell support.

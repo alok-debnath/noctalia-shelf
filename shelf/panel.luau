@@ -593,13 +593,20 @@ end)
 local OPEN_POLL_MS = 5000
 
 local lastViewId = nil
+local VIEW_REQUEST_MAX_AGE_MS = 5000
 
 -- Shows a section another entry asked for (see the service's "shortcut" IPC).
+-- The request outlives a plugin reload in shared state, so an old one is
+-- ignored rather than reopening the section on the next open.
 local function applyView(request)
   if type(request) ~= "table" or request.id == lastViewId then
     return false
   end
   lastViewId = request.id
+  local sentAt = tonumber(request.id)
+  if sentAt == nil or noctalia.nowMs() - sentAt > VIEW_REQUEST_MAX_AGE_MS then
+    return false
+  end
   if request.view == "shortcut" then
     shortcutOpen = true
     shortcutConfirm = false
