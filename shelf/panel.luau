@@ -485,7 +485,10 @@ local function row(item, info)
       key = "grip-" .. path,
       dragType = DRAG_TYPE,
       payload = path,
-      previewAncestor = 1,
+      -- The row is clickable, so the host wraps it in an input area. Lifting
+      -- only the row (1) leaves that wrapper in the list at full height, an
+      -- empty gap next to the drop gap; lift the wrapper (2) instead.
+      previewAncestor = 2,
       liftFromLayout = true,
       width = 14,
       height = 40,
