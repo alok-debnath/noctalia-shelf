@@ -354,6 +354,24 @@ def file_list(paths):
     return Gdk.FileList.new_from_list([Gio.File.new_for_path(p) for p in paths])
 
 
+def hand_cursor(widget):
+    """Open hand over a drag source, closed hand while the button is held.
+
+    Once the drag starts, GTK takes over the cursor and picks it from the drop
+    action (dnd-none, dnd-copy), so this covers the moments before and after.
+    The click gesture is never claimed, so selection and dragging still work."""
+    grab = Gdk.Cursor.new_from_name("grab", None)
+    grabbing = Gdk.Cursor.new_from_name("grabbing", None)
+    widget.set_cursor(grab)
+    press = Gtk.GestureClick(button=Gdk.BUTTON_PRIMARY)
+    press.connect("pressed", lambda *_: widget.set_cursor(grabbing))
+    press.connect("released", lambda *_: widget.set_cursor(grab))
+    # A drag claims the press, which cancels this gesture.
+    press.connect("cancel", lambda *_: widget.set_cursor(grab))
+    press.connect("stopped", lambda *_: widget.set_cursor(grab))
+    widget.add_controller(press)
+
+
 def paths_from_text(text):
     paths = []
     for line in (text or "").splitlines():
@@ -654,6 +672,8 @@ class ShelfRow(Gtk.ListBoxRow):
         remove.add_css_class("row-remove")
         remove.set_tooltip_text("Remove from shelf")
         remove.connect("clicked", lambda *_: window.remove_paths([self.path]))
+        # The row shows a hand; the button is a plain click target.
+        remove.set_cursor(Gdk.Cursor.new_from_name("default", None))
         box.append(remove)
 
         src = Gtk.DragSource(actions=Gdk.DragAction.COPY)
@@ -662,6 +682,7 @@ class ShelfRow(Gtk.ListBoxRow):
         src.connect("drag-cancel", self._on_drag_cancel)
         src.connect("drag-end", self._on_drag_end)
         self.add_controller(src)
+        hand_cursor(self)
         self._drag_paths = []
         self._cancelled = False
 
@@ -843,7 +864,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
         pill.append(Gtk.Image(icon_name="drag-handle-symbolic", pixel_size=14))
         self.drag_all_label = Gtk.Label(label="Drag all")
         pill.append(self.drag_all_label)
-        pill.set_cursor(Gdk.Cursor.new_from_name("grab", None))
+        hand_cursor(pill)
         pill.set_tooltip_text("Drag every file on the shelf into another app")
         src = Gtk.DragSource(actions=Gdk.DragAction.COPY)
         src.connect("prepare", self._on_all_prepare)
