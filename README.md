@@ -35,4 +35,4 @@ gdbus call --session --dest dev.noctalia.Shelf --object-path /dev/noctalia/Shelf
 
 ## License
 
-MIT
+[MIT](LICENSE)
