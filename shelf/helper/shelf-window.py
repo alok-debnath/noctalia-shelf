@@ -14,6 +14,7 @@ per line on stdout. The plugin service owns the store and applies them:
     {"op": "add", "paths": [...]}          files were dropped or pasted
     {"op": "remove", "paths": [...]}       files were removed from the shelf
     {"op": "clear"}                        the shelf was cleared
+    {"op": "drag-out"}                     a drag out of the window started
     {"op": "bye"}                          process is quitting
 
 The process stays resident: closing the window hides it, so showing it again is
@@ -707,6 +708,7 @@ class ShelfRow(Gtk.ListBoxRow):
 
     def _on_drag_begin(self, source, drag):
         self._cancelled = False
+        emit("drag-out")
         Gtk.DragIcon.get_for_drag(drag).set_child(self.window.drag_pill(self._drag_paths))
 
     def _on_drag_cancel(self, source, drag, reason):
@@ -1349,6 +1351,7 @@ class ShelfWindow(Gtk.ApplicationWindow):
 
     def _on_all_begin(self, source, drag):
         self._all_cancelled = False
+        emit("drag-out")
         Gtk.DragIcon.get_for_drag(drag).set_child(self.drag_pill(self._all_paths))
 
     def _on_all_cancel(self, source, drag, reason):

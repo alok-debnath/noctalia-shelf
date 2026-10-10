@@ -166,6 +166,13 @@ local function onHelperLine(line)
     running = true
     wantVisible = false
     setVisible(false)
+  elseif event.op == "drag-out" then
+    -- An open panel maps a full-screen click shield above normal windows, and
+    -- a drop over it never reaches the app underneath. Close the panel so the
+    -- drag can land.
+    if noctalia.state.get(store.PANEL_OPEN_KEY) == true then
+      noctalia.togglePanel(store.PANEL_ID)
+    end
   elseif event.op == "bye" then
     launching = false
     setRunning(false)
@@ -332,6 +339,16 @@ function onIpc(event, payload)
     else
       noctalia.log("shelf: add ignored, no existing path in: " .. tostring(payload))
     end
+  elseif event == "paste" then
+    store.readClipboardPaths(function(paths)
+      if paths == nil then
+        noctalia.log("shelf: paste needs wl-paste (wl-clipboard)")
+      elseif #paths == 0 then
+        noctalia.log("shelf: paste ignored, no files or paths on the clipboard")
+      else
+        store.add(paths)
+      end
+    end)
   elseif event == "clear" then
     store.clear()
   elseif event == "panel" then

@@ -101,13 +101,15 @@ local function allPaths()
 end
 
 local function pasteFromClipboard()
-  local paths = store.pathsFromText(noctalia.clipboardText())
-  if #paths == 0 then
-    showFlash(noctalia.tr("panel.flash.paste_empty"))
-    return
-  end
-  local added = store.add(paths)
-  showFlash(noctalia.trp("panel.flash.added", added))
+  store.readClipboardPaths(function(paths)
+    if paths == nil then
+      showFlash(noctalia.tr("panel.flash.paste_no_wl_paste"), true)
+    elseif #paths == 0 then
+      showFlash(noctalia.tr("panel.flash.paste_empty"))
+    else
+      showFlash(noctalia.trp("panel.flash.added", store.add(paths)))
+    end
+  end)
 end
 
 local function removeMissing()
