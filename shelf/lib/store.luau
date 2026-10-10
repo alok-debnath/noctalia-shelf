@@ -11,6 +11,8 @@ local M = {}
 M.ITEMS_KEY = "shelf.items"
 M.REQUEST_KEY = "shelf.request"
 M.HELPER_KEY = "shelf.helperOpen"
+M.PANEL_OPEN_KEY = "shelf.panelOpen"
+M.PANEL_VIEW_KEY = "shelf.panelView" -- { id, view }: a section the panel should show
 M.PANEL_ID = "alok-debnath/shelf:panel"
 
 function M.path()
@@ -102,6 +104,9 @@ function M.add(paths)
     local now = os.time()
     for i = #paths, 1, -1 do
       local path = paths[i]
+      if type(path) == "string" and #path > 1 then
+        path = string.gsub(path, "/+$", "") -- "/a/b/" and "/a/b" are one entry
+      end
       if type(path) == "string" and path ~= "" then
         local at = indexOf(items, path)
         if at ~= nil then
@@ -243,7 +248,7 @@ function M.formatSize(bytes)
     unit = unit + 1
   end
   if unit == 1 then
-    return string.format("%d %s", value, units[unit])
+    return string.format("%d %s", math.floor(value), units[unit])
   end
   return string.format("%.1f %s", value, units[unit])
 end

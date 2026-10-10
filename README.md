@@ -26,7 +26,12 @@ ln -s "$PWD/noctalia-shelf/shelf" ~/.local/share/noctalia/plugins/shelf
 noctalia msg plugins enable alok-debnath/shelf
 ```
 
-`.luau` edits hot-reload. The drop window is `shelf/helper/shelf-window.py`; restart it to pick up changes.
+`.luau` edits hot-reload. The drop window is `shelf/helper/shelf-window.py`, and it stays running between opens; quit it
+to pick up changes:
+
+```sh
+gdbus call --session --dest dev.noctalia.Shelf --object-path /dev/noctalia/Shelf --method org.gtk.Actions.Activate quit "[]" "{}"
+```
 
 ## License
 

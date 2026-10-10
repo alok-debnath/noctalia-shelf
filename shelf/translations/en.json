@@ -66,6 +66,29 @@
       "paste_empty": "No files or paths on the clipboard",
       "nothing_to_copy": "Nothing to copy: the files are missing",
       "missing": "That file is gone"
+    },
+    "shortcut": {
+      "button": "Keyboard shortcut",
+      "title": "Keyboard shortcut",
+      "summary": "{keys} opens and closes the drop window.",
+      "invalid": "The shortcut setting is not a key combination like Super+Shift+D. Change it in Settings → Plugins → Shelf.",
+      "config": "{compositor} · {path}",
+      "installed": "Added to your {compositor} config",
+      "copy": "Copy line",
+      "copy_command": "Copy command",
+      "add": "Add for me",
+      "remove": "Remove",
+      "confirm": "This adds the line to {path}. A backup is saved next to it as .shelf-backup.",
+      "confirm_add": "Add it",
+      "cancel": "Cancel",
+      "desktop": "Open System Settings → Keyboard → Shortcuts and add a custom shortcut for {keys} that runs:",
+      "unknown": "Bind {keys} in your compositor's config to this command:",
+      "flash": {
+        "copied": "Copied",
+        "added": "Shortcut added",
+        "removed": "Shortcut removed"
+      },
+      "error": "Could not change the config: {error}"
     }
   },
   "notify": {
@@ -79,8 +102,9 @@
   "settings": {
     "window_position": {
       "label": "Drop window position",
-      "description": "Where the drop window opens. Needs gtk4-layer-shell; without it the compositor places the window. Opening at the cursor needs Hyprland and falls back to the centre elsewhere.",
+      "description": "Where the drop window opens. Drag its header to move it. Needs gtk4-layer-shell; without it the compositor places the window.",
       "cursor": "At the cursor",
+      "last": "Where you last moved it (at the cursor until then)",
       "right": "Right",
       "left": "Left",
       "top": "Top",
@@ -113,6 +137,10 @@
     "hide_when_empty": {
       "label": "Hide when empty",
       "description": "Hide the widget while the shelf is empty."
+    },
+    "shortcut": {
+      "label": "Keyboard shortcut",
+      "description": "Keys that open and close the drop window, like Super+Shift+D. Wayland compositors own the keyboard, so open the Shelf panel and use the keyboard button to add the shortcut to your compositor."
     }
   }
 }

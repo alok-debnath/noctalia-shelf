@@ -1,6 +1,6 @@
 id           = "alok-debnath/shelf"
 name         = "Shelf"
-version      = "1.1.1"
+version      = "1.2.0"
 plugin_api   = 24
 author       = "alok-debnath"
 license      = "MIT"
@@ -16,8 +16,11 @@ key             = "window_position"
 type            = "select"
 label_key       = "settings.window_position.label"
 description_key = "settings.window_position.description"
-default         = "cursor"
+default         = "last"
 
+  [[setting.options]]
+  value     = "last"
+  label_key = "settings.window_position.last"
   [[setting.options]]
   value     = "cursor"
   label_key = "settings.window_position.cursor"
@@ -48,6 +51,13 @@ default         = "cursor"
   [[setting.options]]
   value     = "center"
   label_key = "settings.window_position.center"
+
+[[setting]]
+key             = "shortcut"
+type            = "string"
+label_key       = "settings.shortcut.label"
+description_key = "settings.shortcut.description"
+default         = "Super+Shift+D"
 
 [[setting]]
 key             = "remove_after_drag"
